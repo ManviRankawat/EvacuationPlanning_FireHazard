@@ -77,6 +77,12 @@ def solve_maze(maze):
 
     while current_state != maze.goal:
         next_state = mcts(root, maze, maze.goal)
+
+
+        if current_state == (6,6):
+            print("\n⚡ Blocking (8,8) dynamically!")
+            maze.grid[8][8] = 1
+
         new_root = Node(next_state, parent=root)
         root = new_root
         current_state = next_state
@@ -112,15 +118,19 @@ def plot_path(maze, path, delay=0.3):
 
 if __name__ == "__main__":
     grid = [
-        [0, 0, 0, 1, 0],
-        [1, 1, 0, 1, 0],
-        [0, 0, 0, 0, 0],
-        [0, 1, 1, 1, 1],
-        [0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0, 1, 0, 1, 1, 0],
+        [0, 0, 0, 1, 0, 1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 1, 1, 1, 1, 0],
+        [0, 1, 1, 1, 0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 1, 1, 1, 0, 1, 0, 1],
+        [1, 1, 0, 0, 0, 0, 0, 1, 0, 0],
+        [0, 1, 1, 1, 1, 1, 0, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
     ]
     start = (0, 0)
-    goal = (4, 4)
-
+    goal = (9, 9)
     maze = Maze(grid=grid, start=start, goal=goal)
 
     start_time = time.time()
