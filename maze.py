@@ -5,9 +5,12 @@ class Maze:
         self.goal = goal
         self.rows = len(grid)
         self.cols = len(grid[0]) if self.rows > 0 else 0
+        self.fire_block = None  # 🔥 Position to block logically
 
     def is_free(self, position):
         x, y = position
+        if self.fire_block and position == self.fire_block:
+            return False
         return (
             0 <= x < self.rows and
             0 <= y < self.cols and

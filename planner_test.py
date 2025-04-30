@@ -3,6 +3,9 @@ import math
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.image as mpimg
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+
 from maze import Maze
 
 MAX_ROLLOUT_DEPTH = 20
@@ -55,12 +58,18 @@ def expand(node, maze):
 def mcts(root, maze, goal):
     for _ in range(SIMULATIONS):
         node = root
+        # Selection: Traverse the tree by picking the best child until a node is not fully expanded
         while node.is_fully_expanded(maze) and node.children:
             node = node.best_child()
+        # Expansion: If the goal hasn't been reached, expand the current node with a new child
         if node.state != goal:
             node = expand(node, maze)
+        # Simulation: Perform a random rollout from the selected node to estimate the reward    
         result = rollout(node.state, maze, goal)
+        # Backpropagation: Update the reward and visit counts back up the tree
         backpropagate(node, result)
+
+    # After all simulations, choose the best child (exploitation only) as the next move
     return root.best_child(c=0).state
 
 def reconstruct_path(node):
@@ -78,10 +87,10 @@ def solve_maze(maze):
     while current_state != maze.goal:
         next_state = mcts(root, maze, maze.goal)
 
-
-        if current_state == (6,6):
-            print("\n⚡ Blocking (8,8) dynamically!")
-            maze.grid[8][8] = 1
+        # Dynamically block (8,8) with fire (logic only)
+        if current_state == (6, 6):
+            print("\n⚡ Blocking (8,8) dynamically with fire!")
+            maze.fire_block = (8, 8)
 
         new_root = Node(next_state, parent=root)
         root = new_root
@@ -98,10 +107,12 @@ def plot_path(maze, path, delay=0.3):
     # Plot start and goal
     sx, sy = maze.start
     gx, gy = maze.goal
-    ax.plot(sy, sx, "go", label="Start")  # Green dot
-    ax.plot(gy, gx, "ro", label="Goal")   # Red dot
+    ax.plot(sy, sx, "go", label="Start")  
+    goal_img = mpimg.imread("assets/goal.png")
+    goal_icon = OffsetImage(goal_img, zoom=0.05)
+    goal_box = AnnotationBbox(goal_icon, (gy, gx), frameon=False)
+    ax.add_artist(goal_box)
 
-    # Static setup
     ax.set_xticks(np.arange(len(grid[0])))
     ax.set_yticks(np.arange(len(grid)))
     ax.grid(True)
@@ -109,10 +120,27 @@ def plot_path(maze, path, delay=0.3):
     plt.gca().invert_yaxis()
     plt.title("Maze Path using MCTS")
 
-    # Animate step-by-step
-    for (x, y) in path:
-        ax.plot(y, x, "bs")  # Blue square for path
-        plt.pause(delay)
+    if maze.fire_block:
+            fire_img = mpimg.imread("assets/fire.png")
+            fx, fy = maze.fire_block
+            fire_box = OffsetImage(fire_img, zoom=0.01)
+            fire_ab = AnnotationBbox(fire_box, (fy, fx), frameon=False)
+            ax.add_artist(fire_ab)
+       
+    try:
+        person_img = mpimg.imread("assets/person.png")
+        imagebox = OffsetImage(person_img, zoom=0.05)
+        ab = None
+        for (x, y) in path:
+            if ab:
+                ab.remove()
+            ab = AnnotationBbox(imagebox, (y, x), frameon=False)
+            ax.add_artist(ab)
+            plt.pause(delay)
+    except FileNotFoundError:
+        for (x, y) in path:
+            ax.plot(y, x, "bs")
+            plt.pause(delay)
 
     plt.show()
 
