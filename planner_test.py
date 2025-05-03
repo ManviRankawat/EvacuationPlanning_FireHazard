@@ -30,10 +30,14 @@ class Node:
         )
 
 def rollout(state, maze, goal):
+    prev_state = None
     for _ in range(MAX_ROLLOUT_DEPTH):
         actions = maze.get_legal_actions(state)
+        if prev_state and prev_state in actions:
+            actions.remove(prev_state)
         if not actions:
             break
+        prev_state = state
         state = random.choice(actions)
         if state == goal:
             return 1
@@ -49,7 +53,7 @@ def expand(node, maze):
     tried = [child.state for child in node.children]
     legal = maze.get_legal_actions(node.state)
     for move in legal:
-        if move not in tried:
+        if move not in tried and (node.parent is None or move != node.parent.state):
             new_node = Node(state=move, parent=node)
             node.children.append(new_node)
             return new_node
@@ -69,6 +73,10 @@ def mcts(root, maze, goal):
         # Backpropagation: Update the reward and visit counts back up the tree
         backpropagate(node, result)
 
+    if not root.children:
+        print("⚠️ No valid children found. Possibly stuck or fire blocked all paths.")
+        return root.state 
+    
     # After all simulations, choose the best child (exploitation only) as the next move
     return root.best_child(c=0).state
 
@@ -167,4 +175,4 @@ if __name__ == "__main__":
     print("Steps:", len(path))
     print("Time taken: %.2f seconds" % (time.time() - start_time))
 
-    plot_path(maze, path, delay=0.3)
+    plot_path(maze, path, delay=0.1)
