@@ -98,7 +98,7 @@ def solve_maze(maze):
         # Dynamically block (8,8) with fire (logic only)
         if current_state == (6, 6):
             print("\n⚡ Blocking (8,8) dynamically with fire!")
-            maze.fire_block = (8, 8)
+            maze.fire_block = (2, 6)
 
         new_root = Node(next_state, parent=root)
         root = new_root
@@ -115,7 +115,7 @@ def plot_path(maze, path, delay=0.3):
     # Plot start and goal
     sx, sy = maze.start
     gx, gy = maze.goal
-    ax.plot(sy, sx, "go", label="Start")  
+    ax.plot(sy, sx, "go")  
     goal_img = mpimg.imread("assets/goal.png")
     goal_icon = OffsetImage(goal_img, zoom=0.05)
     goal_box = AnnotationBbox(goal_icon, (gy, gx), frameon=False)
@@ -154,19 +154,20 @@ def plot_path(maze, path, delay=0.3):
 
 if __name__ == "__main__":
     grid = [
-        [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-        [0, 1, 1, 1, 0, 1, 0, 1, 1, 0],
-        [0, 0, 0, 1, 0, 1, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 1, 1, 1, 1, 0],
-        [0, 1, 1, 1, 0, 0, 0, 1, 0, 0],
-        [0, 0, 0, 1, 1, 1, 0, 1, 0, 1],
-        [1, 1, 0, 0, 0, 0, 0, 1, 0, 0],
-        [0, 1, 1, 1, 1, 1, 0, 1, 1, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1],
+        [0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1],
+        [0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 1],
+        [0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1],
+        [0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1],
+        [1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     ]
     start = (0, 0)
-    goal = (9, 9)
+    goal = (10, 1)
     maze = Maze(grid=grid, start=start, goal=goal)
 
     start_time = time.time()
