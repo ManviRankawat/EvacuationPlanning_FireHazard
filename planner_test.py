@@ -8,7 +8,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 from maze import Maze
 
-MAX_ROLLOUT_DEPTH = 20
+MAX_ROLLOUT_DEPTH = 30
 EXPLORATION_CONSTANT = 1.4
 SIMULATIONS = 1000
 
