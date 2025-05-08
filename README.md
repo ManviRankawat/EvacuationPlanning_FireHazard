@@ -40,7 +40,7 @@ Consists of 4 discrete movement directions: Up, Down, Left, Right.
 
 ### Transitions:
   #### Agent Movement:
-   -The agent navigates the maze using MCTS- Selection, Expansion, Simulation and Backpropagation phases guide each move.
+   - The agent navigates the maze using MCTS- Selection, Expansion, Simulation and Backpropagation phases guide each move.
    - Implemented in solve_maze() when current_state is updated to next_state
    - Path history is tracked and visualized with blue dots
   #### Environment Appearance:
