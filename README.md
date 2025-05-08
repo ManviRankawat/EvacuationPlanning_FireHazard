@@ -4,8 +4,7 @@
 ---
 
 ### Problem Statement:
-Goal is to create an intelligent evacuation plan to help guide a rescue agent toward the nearest exit.  
-This is done using an algorithm that enables the rescuer to adapt in real time—rerouting when paths are blocked, fire spreads.
+An intelligent evacuation planning system using Monte Carlo Tree Search to guide a rescue agent toward the nearest exit while dynamically adapting to spreading fires and uncertain environments.
 
 **Uncertainty involved**: The simulation introduces new obstacles randomly during execution.  
 We are restricting the model to a 2D floor plan (grid-based environment) to ensure the project remains feasible within the course timeline.
@@ -33,13 +32,22 @@ Existing approaches to dynamic path planning include:
 ## Modeling and Solving the Problem
 
 ### State Space:
-Represents the rescue agent’s position on a 2D grid, along with static obstacles, predicted hazard regions, and estimated positions of civilians and exits.
+Represents the rescue agent’s position on a 2D grid (0,0), along with dynamic obstacles and escape target(10,1
+).
 
 ### Action Space:
-Consists of 8 discrete movement directions: Up, Down, Left, Right, and the four diagonals (Up-Right, Up-Left, Down-Right, Down-Left).
+Consists of 4 discrete movement directions: Up, Down, Left, Right.
 
+### Transitions:
+  #### Agent Movement:
+   -The agent navigates the maze using MCTS- Selection, Expansion, Simulation and Backpropagation phases guide each move.
+   - Implemented in solve_maze() when current_state is updated to next_state
+   - Path history is tracked and visualized with blue dots
+  #### Environment Appearance:
+   - Fire hazards appear dynamically in the environment
+     
 ### Observations:
-The rescue agent **directly observes** its surroundings (e.g., adjacent grid cells) at each step. These include visible civilians, fire, smoke, debris, and blocked paths. The agent perceives the environment based on **line of sight**, not sensors.
+The rescue agent **directly observes** its surroundings (e.g., adjacent grid cells) at each step. These include fire and blocked paths. The agent perceives the environment based on **line of sight**, not sensors.
 
 ---
 
