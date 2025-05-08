@@ -5,20 +5,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.image as mpimg
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from collections import deque
 
 from maze import Maze
 
-MAX_ROLLOUT_DEPTH = 20
+MAX_ROLLOUT_DEPTH = 30
 EXPLORATION_CONSTANT = 1.4
 SIMULATIONS = 1000
+PATH_LENGTH_PENALTY = 0.05
 
 class Node:
-    def __init__(self, state, parent=None):
+    def __init__(self, state, parent=None, depth=0):
         self.state = state
         self.parent = parent
         self.children = []
         self.visits = 0
         self.reward = 0
+        self.depth = depth
 
     def is_fully_expanded(self, maze):
         return len(self.children) == len(maze.get_legal_actions(self.state))
@@ -26,21 +29,45 @@ class Node:
     def best_child(self, c=EXPLORATION_CONSTANT):
         return max(
             self.children,
-            key=lambda node: node.reward / node.visits + c * math.sqrt(math.log(self.visits) / node.visits)
+            key=lambda node: (node.reward / max(node.visits, 1)) - 
+                            (PATH_LENGTH_PENALTY * node.depth) + 
+                            c * math.sqrt(math.log(max(self.visits, 1)) / max(node.visits, 1))
         )
-
-def rollout(state, maze, goal):
-    prev_state = None
-    for _ in range(MAX_ROLLOUT_DEPTH):
+    
+def rollout(state, maze, goal, max_depth=MAX_ROLLOUT_DEPTH):
+    path_length = 0
+    visited = set([state])  # Track visited states to avoid cycles
+    
+    for _ in range(max_depth):
         actions = maze.get_legal_actions(state)
-        if prev_state and prev_state in actions:
-            actions.remove(prev_state)
-        if not actions:
-            break
-        prev_state = state
-        state = random.choice(actions)
+        
+        # Filter out actions that lead to already visited states
+        unvisited_actions = [a for a in actions if a not in visited]
+        
+        if not unvisited_actions:
+            if not actions:  # No actions at all
+                return 0
+            # If all actions lead to visited states, pick randomly from all actions
+            next_state = random.choice(actions)
+        else:
+            # Calculate Manhattan distance to goal for each unvisited action
+            distances = [(abs(a[0] - goal[0]) + abs(a[1] - goal[1]), a) for a in unvisited_actions]
+            
+            # 70% of the time, pick from the actions that lead closer to the goal
+            if random.random() < 0.7:
+                distances.sort()  # Sort by distance (closest first)
+                next_state = distances[0][1]  # Pick the closest to goal
+            else:
+                next_state = random.choice(unvisited_actions)
+        
+        state = next_state
+        visited.add(state)
+        path_length += 1
+        
         if state == goal:
-            return 1
+            # Higher reward for shorter paths
+            return 1.0 * (1 + (max_depth - path_length) / max_depth)
+            
     return 0
 
 def backpropagate(node, result):
@@ -54,22 +81,29 @@ def expand(node, maze):
     legal = maze.get_legal_actions(node.state)
     for move in legal:
         if move not in tried and (node.parent is None or move != node.parent.state):
-            new_node = Node(state=move, parent=node)
+            new_node = Node(state=move, parent=node, depth=node.depth + 1)
             node.children.append(new_node)
             return new_node
     return node
 
-def mcts(root, maze, goal):
+def mcts(root, maze, goal, recent_states=None):
     for _ in range(SIMULATIONS):
         node = root
         # Selection: Traverse the tree by picking the best child until a node is not fully expanded
         while node.is_fully_expanded(maze) and node.children:
             node = node.best_child()
+            if node is None:
+                break
         # Expansion: If the goal hasn't been reached, expand the current node with a new child
-        if node.state != goal:
-            node = expand(node, maze)
+        if node and node.state != goal:
+            expanded_node = expand(node, maze)
+            if expanded_node == node:
+                pass
+            else:
+                node = expanded_node
         # Simulation: Perform a random rollout from the selected node to estimate the reward    
-        result = rollout(node.state, maze, goal)
+        if node:
+            result = rollout(node.state, maze, goal)
         # Backpropagation: Update the reward and visit counts back up the tree
         backpropagate(node, result)
 
@@ -77,9 +111,23 @@ def mcts(root, maze, goal):
         print("⚠️ No valid children found. Possibly stuck or fire blocked all paths.")
         return root.state 
     
-    # After all simulations, choose the best child (exploitation only) as the next move
-    return root.best_child(c=0).state
-
+    # When selecting the best move, avoid states that have been visited recently
+    if recent_states:
+        # First try to find a child that hasn't been visited recently
+        unvisited_children = [child for child in root.children if child.state not in recent_states]
+        if unvisited_children:
+            # Find the best among unvisited
+            best = max(unvisited_children, 
+                      key=lambda node: node.reward / max(node.visits, 1))
+            return best.state
+    
+    # If all children have been visited recently or recent_states is None, pick the best
+    best = root.best_child(c=0)
+    if best:
+        return best.state
+    else:
+        return root.state
+    
 def reconstruct_path(node):
     path = []
     while node:
@@ -92,18 +140,46 @@ def solve_maze(maze):
     root = Node(current_state)
     path = [current_state]
 
+    recent_states = deque(maxlen=10)  # Remember last 10 states
+    recent_states.append(current_state)
+    
+    # Dictionary to track state visitation count
+    state_visits = {current_state: 1}
+
     while current_state != maze.goal:
-        next_state = mcts(root, maze, maze.goal)
+        next_state = mcts(root, maze, maze.goal, recent_states=set(recent_states))
 
-        # Dynamically block (8,8) with fire (logic only)
+        if next_state in state_visits:
+            state_visits[next_state] += 1
+            # If we've visited this state many times, try to force a different path
+            if state_visits[next_state] > 3:
+                print(f"Visited state {next_state} multiple times. Forcing exploration.")
+                legal_actions = maze.get_legal_actions(current_state)
+                # Remove heavily visited states
+                unexplored = [state for state in legal_actions 
+                             if state not in state_visits or state_visits[state] < 2]
+                if unexplored:
+                    next_state = random.choice(unexplored)
+        else:
+            state_visits[next_state] = 1
+
+        # Dynamically block (8,8) with fire when agent reaches (6, 6)
         if current_state == (6, 6):
-            print("\n⚡ Blocking (8,8) dynamically with fire!")
-            maze.fire_block = (2, 6)
+            print("\n⚡ Blocking (8, 8) dynamically with fire!")
+            maze.fire_block = (8, 8)
 
-        new_root = Node(next_state, parent=root)
+        if next_state == maze.fire_block:
+                print("Avoiding fire block!")
+                # Recalculate with fire block knowledge
+                next_state = mcts(root, maze, maze.goal, recent_states=set(recent_states))
+
+        # Create new root with correct depth information
+        next_depth = root.depth + 1 if hasattr(root, 'depth') else 1
+        new_root = Node(next_state, parent=None, depth=next_depth)
         root = new_root
         current_state = next_state
         path.append(current_state)
+        recent_states.append(current_state)
 
     return path
 
@@ -116,10 +192,13 @@ def plot_path(maze, path, delay=0.3):
     sx, sy = maze.start
     gx, gy = maze.goal
     ax.plot(sy, sx, "go")  
-    goal_img = mpimg.imread("assets/goal.png")
-    goal_icon = OffsetImage(goal_img, zoom=0.05)
-    goal_box = AnnotationBbox(goal_icon, (gy, gx), frameon=False)
-    ax.add_artist(goal_box)
+    try:
+        goal_img = mpimg.imread("assets/goal.png")
+        goal_icon = OffsetImage(goal_img, zoom=0.05)
+        goal_box = AnnotationBbox(goal_icon, (gy, gx), frameon=False)
+        ax.add_artist(goal_box)
+    except FileNotFoundError:
+        ax.plot(gy, gx, "r*", markersize=12)
 
     ax.set_xticks(np.arange(len(grid[0])))
     ax.set_yticks(np.arange(len(grid)))
@@ -129,25 +208,53 @@ def plot_path(maze, path, delay=0.3):
     plt.title("Maze Path using MCTS")
 
     if maze.fire_block:
+        try:
             fire_img = mpimg.imread("assets/fire.png")
             fx, fy = maze.fire_block
             fire_box = OffsetImage(fire_img, zoom=0.01)
             fire_ab = AnnotationBbox(fire_box, (fy, fx), frameon=False)
             ax.add_artist(fire_ab)
+        except FileNotFoundError:
+            fx, fy = maze.fire_block
+            ax.plot(fy, fx, "rx", markersize=10)
+            ax.text(fy, fx, "FIRE", color='red', ha='center', va='center')
        
     try:
         person_img = mpimg.imread("assets/person.png")
         imagebox = OffsetImage(person_img, zoom=0.05)
         ab = None
-        for (x, y) in path:
+
+        previous_positions = []
+
+        for i, (x, y) in enumerate(path):
+            for prev_x, prev_y in previous_positions:
+                ax.plot(prev_y, prev_x, 'b.', alpha=0.7, markersize=8)
+            
             if ab:
                 ab.remove()
+                if i > 0:
+                    previous_positions.append(path[i-1])
             ab = AnnotationBbox(imagebox, (y, x), frameon=False)
             ax.add_artist(ab)
+            plt.title(f"Maze Path using MCTS - Step {i+1}/{len(path)}")
             plt.pause(delay)
     except FileNotFoundError:
-        for (x, y) in path:
-            ax.plot(y, x, "bs")
+        previous_positions = []
+        current_marker = None
+        for i, (x, y) in enumerate(path):
+            for prev_x, prev_y in previous_positions:
+                ax.plot(prev_y, prev_x, 'b.', alpha=0.7, markersize=8)
+            
+            # Remove previous person marker and add its position to the list
+            if current_marker:
+                current_marker.remove()
+                if i > 0:
+                    previous_positions.append(path[i-1])
+            
+            # Plot current position with a square
+            current_marker = ax.plot(y, x, "bs", markersize=10)[0]
+            
+            plt.title(f"Maze Path using MCTS - Step {i+1}/{len(path)}")
             plt.pause(delay)
 
     plt.show()
