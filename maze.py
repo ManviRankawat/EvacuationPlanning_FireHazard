@@ -1,3 +1,4 @@
+# maze.py
 class Maze:
     def __init__(self, grid, start, goal):
         self.grid = grid
@@ -26,4 +27,3 @@ class Maze:
                 if self.grid[nx][ny] == 0 and (nx, ny) != self.fire_block:
                     actions.append((nx, ny))
         return actions
-

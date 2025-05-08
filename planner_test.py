@@ -9,6 +9,41 @@ from collections import deque
 
 from maze import Maze
 
+# In planner_test.py, after "from maze import Maze"
+class DynamicFireMaze(Maze):
+    """Extends the Maze class to support dynamic fire appearance"""
+    def __init__(self, grid, start, goal):
+        super().__init__(grid, start, goal)
+        self.fire_blocks = set()  # Use a set instead of a single fire_block
+        self.potential_fires = {
+            (6, 6): 2,  # Format: fire_position: proximity_threshold
+            (0, 9): 3
+        }
+        
+    def update_fires(self, agent_position):
+        """Check if agent is near potential fires and activate them if so"""
+        new_fires = False
+        # Check if agent is close to any potential fire locations
+        for fire_pos, threshold in list(self.potential_fires.items()):
+            distance = abs(agent_position[0] - fire_pos[0]) + abs(agent_position[1] - fire_pos[1])
+            if distance <= threshold:
+                print(f"\n🔥 Fire appears at {fire_pos} as the robot approaches!")
+                self.fire_blocks.add(fire_pos)  # Add to fire blocks set
+                del self.potential_fires[fire_pos]  # Remove from potential fires
+                new_fires = True
+        return new_fires
+        
+    def get_legal_actions(self, state):
+        """Override to check against all fire blocks"""
+        actions = []
+        x, y = state
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < len(self.grid) and 0 <= ny < len(self.grid[0]):
+                if self.grid[nx][ny] == 0 and (nx, ny) not in self.fire_blocks:
+                    actions.append((nx, ny))
+        return actions
+
 MAX_ROLLOUT_DEPTH = 30
 EXPLORATION_CONSTANT = 1.4
 SIMULATIONS = 1000
@@ -146,7 +181,13 @@ def solve_maze(maze):
     # Dictionary to track state visitation count
     state_visits = {current_state: 1}
 
+    fire_events = []
+
     while current_state != maze.goal:
+
+        if hasattr(maze, 'update_fires') and maze.update_fires(current_state):
+            # If new fires appeared, record the event
+            fire_events.append((len(path), current_state, list(maze.fire_blocks)))
         next_state = mcts(root, maze, maze.goal, recent_states=set(recent_states))
 
         if next_state in state_visits:
@@ -163,15 +204,14 @@ def solve_maze(maze):
         else:
             state_visits[next_state] = 1
 
-        # Dynamically block (8,8) with fire when agent reaches (6, 6)
-        if current_state == (6, 6):
-            print("\n⚡ Blocking (8, 8) dynamically with fire!")
-            maze.fire_block = (8, 8)
-
-        if next_state == maze.fire_block:
-                print("Avoiding fire block!")
-                # Recalculate with fire block knowledge
-                next_state = mcts(root, maze, maze.goal, recent_states=set(recent_states))
+        if hasattr(maze, 'fire_blocks') and next_state in maze.fire_blocks:
+            print("Avoiding fire block!")
+            legal_actions = maze.get_legal_actions(current_state)
+            if legal_actions:
+                next_state = random.choice(legal_actions)
+            else:
+                print("No safe moves available!")
+                break
 
         # Create new root with correct depth information
         next_depth = root.depth + 1 if hasattr(root, 'depth') else 1
@@ -181,9 +221,9 @@ def solve_maze(maze):
         path.append(current_state)
         recent_states.append(current_state)
 
-    return path
+    return path, fire_events
 
-def plot_path(maze, path, delay=0.3):
+def plot_path(maze, path, fire_events=None, delay=0.3):
     grid = np.array(maze.grid)
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.imshow(grid, cmap='binary')
@@ -207,29 +247,49 @@ def plot_path(maze, path, delay=0.3):
     plt.gca().invert_yaxis()
     plt.title("Maze Path using MCTS")
 
-    if maze.fire_block:
-        try:
-            fire_img = mpimg.imread("assets/fire.png")
-            fx, fy = maze.fire_block
-            fire_box = OffsetImage(fire_img, zoom=0.01)
-            fire_ab = AnnotationBbox(fire_box, (fy, fx), frameon=False)
-            ax.add_artist(fire_ab)
-        except FileNotFoundError:
-            fx, fy = maze.fire_block
-            ax.plot(fy, fx, "rx", markersize=10)
-            ax.text(fy, fx, "FIRE", color='red', ha='center', va='center')
-       
+    fire_boxes = {}
+    active_fires = set()
+
+    fire_event_idx = 0
+
+    previous_positions = []
+    
     try:
         person_img = mpimg.imread("assets/person.png")
+        fire_img = mpimg.imread("assets/fire.png")
         imagebox = OffsetImage(person_img, zoom=0.05)
         ab = None
-
-        previous_positions = []
 
         for i, (x, y) in enumerate(path):
             for prev_x, prev_y in previous_positions:
                 ax.plot(prev_y, prev_x, 'b.', alpha=0.7, markersize=8)
-            
+            if fire_events and fire_event_idx < len(fire_events) and i == fire_events[fire_event_idx][0]:
+                # Get new fires from the event
+                _, _, fires = fire_events[fire_event_idx]
+                new_fires = set(fires) - active_fires
+                
+                # Animate fire appearance
+                for fx, fy in new_fires:
+                    # Flashing animation
+                    for _ in range(3):
+                        fire_icon = OffsetImage(fire_img, zoom=0.01)
+                        fire_box = AnnotationBbox(fire_icon, (fy, fx), frameon=False)
+                        ax.add_artist(fire_box)
+                        plt.title("FIRE APPEARS!")
+                        plt.pause(0.2)
+                        fire_box.remove()
+                        plt.pause(0.1)
+                    
+                    # Add permanent fire
+                    fire_icon = OffsetImage(fire_img, zoom=0.02)
+                    fire_box = AnnotationBbox(fire_icon, (fy, fx), frameon=False)
+                    ax.add_artist(fire_box)
+                    fire_boxes[(fx, fy)] = fire_box
+                
+                active_fires.update(new_fires)
+                fire_event_idx += 1
+                plt.pause(1.0)  
+
             if ab:
                 ab.remove()
                 if i > 0:
@@ -239,20 +299,27 @@ def plot_path(maze, path, delay=0.3):
             plt.title(f"Maze Path using MCTS - Step {i+1}/{len(path)}")
             plt.pause(delay)
     except FileNotFoundError:
-        previous_positions = []
-        current_marker = None
         for i, (x, y) in enumerate(path):
+            # Add blue dots at previous positions
             for prev_x, prev_y in previous_positions:
                 ax.plot(prev_y, prev_x, 'b.', alpha=0.7, markersize=8)
             
-            # Remove previous person marker and add its position to the list
-            if current_marker:
-                current_marker.remove()
-                if i > 0:
-                    previous_positions.append(path[i-1])
+            if fire_events and fire_event_idx < len(fire_events) and i == fire_events[fire_event_idx][0]:
+                _, _, fires = fire_events[fire_event_idx]
+                new_fires = set(fires) - active_fires
+                
+                for fx, fy in new_fires:
+                    ax.plot(fy, fx, "rx", markersize=10)
+                    ax.text(fy, fx, "FIRE", color='red', ha='center', va='center')
+                
+                active_fires.update(new_fires)
+                fire_event_idx += 1
+                plt.pause(1.0)
+           
+            if i > 0:
+                previous_positions.append(path[i-1])
             
-            # Plot current position with a square
-            current_marker = ax.plot(y, x, "bs", markersize=10)[0]
+            ax.plot(y, x, "bs")
             
             plt.title(f"Maze Path using MCTS - Step {i+1}/{len(path)}")
             plt.pause(delay)
@@ -275,12 +342,13 @@ if __name__ == "__main__":
     ]
     start = (0, 0)
     goal = (10, 1)
-    maze = Maze(grid=grid, start=start, goal=goal)
+    maze = DynamicFireMaze(grid=grid, start=start, goal=goal)
 
     start_time = time.time()
-    path = solve_maze(maze)
+    path, fire_events = solve_maze(maze)
     print("Found path:", path)
     print("Steps:", len(path))
+    print("Fire events:", fire_events)
     print("Time taken: %.2f seconds" % (time.time() - start_time))
 
-    plot_path(maze, path, delay=0.1)
+    plot_path(maze, path, fire_events, delay=0.1)
